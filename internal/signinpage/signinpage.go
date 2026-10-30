@@ -9,12 +9,28 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"regexp"
 )
 
 // logo is magpie's mark (build/icon/magpie-small.svg), signing the page.
 //
 //go:embed magpie.svg
 var logo string
+
+// hyphened is a short word with a hyphen in it, such as sign-in, which a
+// browser would otherwise break after its hyphen. A long one (an id) is
+// left free to wrap, so it can't push out of the card.
+var hyphened = regexp.MustCompile(`[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)+`)
+
+// text escapes s and keeps each short hyphened word on one line.
+func text(s string) string {
+	return hyphened.ReplaceAllStringFunc(html.EscapeString(s), func(w string) string {
+		if len(w) > 20 {
+			return w
+		}
+		return `<span class="nb">` + w + `</span>`
+	})
+}
 
 // Write answers with the page: a check when ok, a cross when not, the
 // title over msg. Both are escaped.
@@ -38,8 +54,9 @@ body{background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,BlinkMacSy
 h1{font-size:18px;font-weight:620;margin:0 0 6px;letter-spacing:-.01em}p{margin:0;color:var(--muted);font-size:14px;overflow-wrap:anywhere}
 .by{margin-top:24px;display:flex;align-items:center;justify-content:center;gap:7px;font-size:12.5px;font-weight:560;color:var(--muted);letter-spacing:.01em}
 .by svg{width:20px;height:20px;fill:currentColor}
+.nb{white-space:nowrap}
 @media (prefers-reduced-motion:reduce){.card{animation:none}}
 @keyframes in{from{opacity:0;transform:translateY(6px) scale(.98)}}
-</style></head><body><div class="card"><div class="mark"><svg viewBox="0 0 24 24">%[3]s</svg></div>
-<h1>%[1]s</h1><p>%[2]s</p><div class="by">%[4]smagpie</div></div></body></html>`, html.EscapeString(title), html.EscapeString(msg), mark, logo)
+</style></head><body><div class="card"><div class="mark"><svg viewBox="0 0 24 24">%[4]s</svg></div>
+<h1>%[2]s</h1><p>%[3]s</p><div class="by">%[5]smagpie</div></div></body></html>`, html.EscapeString(title), text(title), text(msg), mark, logo)
 }

@@ -27,3 +27,17 @@ func TestWrite(t *testing.T) {
 		}
 	}
 }
+
+// A short hyphened word stays on one line, so "sign-in" never breaks after
+// its hyphen; a long id is left to wrap, and the hyphen itself is kept.
+func TestHyphenedWordsKeepTogether(t *testing.T) {
+	rec := httptest.NewRecorder()
+	Write(rec, 200, true, "Signed in", "Every agent uses this sign-in. Client client-0123456789abcdef0123 too.")
+	body := rec.Body.String()
+	if !strings.Contains(body, `<span class="nb">sign-in</span>`) {
+		t.Fatalf("sign-in can break after its hyphen:\n%s", body)
+	}
+	if strings.Contains(body, `<span class="nb">client-0123`) || !strings.Contains(body, "client-0123456789abcdef0123") {
+		t.Fatalf("a long id is held on one line or lost its hyphen:\n%s", body)
+	}
+}
