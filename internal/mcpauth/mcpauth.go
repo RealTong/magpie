@@ -23,7 +23,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html"
 	"io"
 	"io/fs"
 	"mime"
@@ -41,6 +40,7 @@ import (
 	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/signinpage"
 	"github.com/yetone/magpie/internal/steady"
 )
 
@@ -893,13 +893,13 @@ func StartWith(ctx context.Context, name, serverURL string, app *App) (State, er
 	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
 		v := r.URL.Query()
 		if v.Get("state") != state {
-			page(w, http.StatusBadRequest, "This sign-in link is out of date. Start the sign-in again from Magpie.")
+			signinpage.Write(w, http.StatusBadRequest, false, "This link is out of date", "Start the sign-in again from magpie.")
 			return
 		}
 		f.mu.Lock()
 		if f.claimed || f.finished {
 			f.mu.Unlock()
-			page(w, http.StatusOK, "Magpie has this sign-in already. You can close this tab.")
+			signinpage.Write(w, http.StatusOK, true, "You're signed in", "magpie has this sign-in already. You can close this tab.")
 			return
 		}
 		f.claimed = true
@@ -910,7 +910,7 @@ func StartWith(ctx context.Context, name, serverURL string, app *App) (State, er
 				msg += ": " + d
 			}
 			f.finish(State{State: "failed", Error: "the sign-in was refused (" + msg + ")"})
-			page(w, http.StatusOK, "The sign-in was refused: "+msg)
+			signinpage.Write(w, http.StatusOK, false, "The sign-in was refused", msg)
 			return
 		}
 		cctx, ccancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -922,7 +922,7 @@ func StartWith(ctx context.Context, name, serverURL string, app *App) (State, er
 		t, err := tokenRequest(cctx, rec, form)
 		if err != nil {
 			f.finish(State{State: "failed", Error: err.Error()})
-			page(w, http.StatusOK, "Magpie couldn't finish the sign-in: "+err.Error())
+			signinpage.Write(w, http.StatusOK, false, "magpie couldn't finish the sign-in", err.Error())
 			return
 		}
 		r2 := rec
@@ -931,10 +931,10 @@ func StartWith(ctx context.Context, name, serverURL string, app *App) (State, er
 			r2.Scope = t.Scope
 		}
 		if err := f.keep(name, r2); err != nil {
-			page(w, http.StatusOK, "Magpie couldn't keep the sign-in: "+err.Error())
+			signinpage.Write(w, http.StatusOK, false, "magpie couldn't keep the sign-in", err.Error())
 			return
 		}
-		page(w, http.StatusOK, "Magpie is signed in to "+name+". Every agent given it in the Library uses this sign-in. You can close this tab.")
+		signinpage.Write(w, http.StatusOK, true, "Signed in to "+name, "Every agent given it in the Library uses this sign-in. You can close this tab.")
 	})
 	f.srv = &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	go f.srv.Serve(ln)
@@ -1031,10 +1031,4 @@ func Cancel(id string) {
 	if f != nil {
 		f.finish(State{State: "canceled"})
 	}
-}
-
-func page(w http.ResponseWriter, status int, msg string) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(status)
-	fmt.Fprintf(w, `<!doctype html><meta charset="utf-8"><title>Magpie</title><body style="font:15px -apple-system,system-ui,sans-serif;max-width:32em;margin:4em auto;padding:0 1em;color:#222">%s</body>`, html.EscapeString(msg))
 }
